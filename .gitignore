@@ -1,0 +1,60 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build
+/.next/
+/out/
+/build
+/dist
+
+# Coverage
+/coverage
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.VSCodeCounter
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys
+*.pem
+
+# Logs
+/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# PWA generated files
+sw.js
+sw.js.map
+workbox-*.js
+workbox-*.js.map
+
+# Misc
+tool-schemas
+
+# Docker volumes (local dev)
+data/

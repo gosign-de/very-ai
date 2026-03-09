@@ -1,0 +1,40 @@
+{
+  "subscription": {
+    "pricing": "Pricing",
+    "free": "Free",
+    "remainOnFree": "Remain on Free",
+    "paid": "Paid",
+    "upgradeToPro": "Upgrade to pro"
+  },
+  "workspace_selected": "workspaces selected",
+  "search_placeholder": "Search workspaces...",
+  "toast_message": "You must select at least one workspace",
+  "Author": "Author",
+  "Author name...": "Author name...",
+  "notifications": {
+    "success": {
+      "delete": "{{displayName}} deleted successfully"
+    }
+  },
+  "file_already_uploaded": "This file has already been uploaded. The file may not have access to the workspace. Please check the Files menu.",
+  "File added to workspace": "File added to workspace",
+  "Failed to add file to workspace": "Failed to add file to workspace",
+  "Thinking": "Show train of thought",
+  "Processing your request...": "Processing your request...",
+  "No thinking content available": "No thinking content available",
+  "Welcome to Gosign AI Chatbot": "Welcome to Gosign AI Chatbot",
+  "Click next to start chatting.": "Click next to start chatting.",
+  "Features": "Features",
+  "Enable or disable specific features across the application.": "Enable or disable specific features across the application.",
+  "OneDrive Integration": "OneDrive Integration",
+  "Allow users to upload files from OneDrive. When disabled, only local file uploads will be available.": "Allow users to upload files from OneDrive. When disabled, only local file uploads will be available.",
+  "SharePoint Integration": "SharePoint Integration",
+  "Allow users to browse and upload files from SharePoint sites and document libraries.": "Allow users to browse and upload files from SharePoint sites and document libraries.",
+  "Reasoning Effort Level": "Thinking Time",
+  "Summary": "Summary",
+  "Quick Settings": "Select assistant",
+  "Open Quick Settings": "Select assistant",
+  "Chats Include Profile Context": "Include profile context",
+  "Chats Include Workspace Instructions": "Include workspace context",
+  "Copy Assistant into Private Workspace": "Copy Assistant into Private Workspace"
+}

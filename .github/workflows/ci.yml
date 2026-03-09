@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: veryai_test
+          POSTGRES_PASSWORD: veryai_test
+          POSTGRES_DB: veryai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U veryai_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://veryai_test:veryai_test@localhost:5432/veryai_test
+      AUTH_PROVIDER: local
+      AUTH_SECRET: test-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Run Tests
+        run: npm test -- --reporter=verbose
+
+      - name: Run Coverage
+        run: npm run test:coverage
+
+      - name: Check Coverage Thresholds
+        run: |
+          node -e "
+            const fs = require('fs');
+            const summary = JSON.parse(fs.readFileSync('./coverage/coverage-summary.json', 'utf8'));
+            const total = summary.total;
+            const thresholds = { statements: 60, branches: 50, functions: 60, lines: 60 };
+            let failed = false;
+            for (const [key, min] of Object.entries(thresholds)) {
+              const actual = total[key].pct;
+              if (actual < min) {
+                console.error(key + ': ' + actual + '% < ' + min + '% threshold');
+                failed = true;
+              } else {
+                console.log(key + ': ' + actual + '% >= ' + min + '%');
+              }
+            }
+            if (failed) process.exit(1);
+            console.log('All coverage thresholds met.');
+          "
+
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-key
+      AUTH_PROVIDER: local
+      AUTH_SECRET: ci-build-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  docker:
+    name: Docker Build & Smoke Test
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker Image
+        run: docker compose build
+      - name: Start Services
+        run: docker compose up -d
+      - name: Wait for Healthy
+        run: |
+          echo "Waiting for app to be healthy..."
+          for i in $(seq 1 30); do
+            if curl -f http://localhost:3000/api/health 2>/dev/null; then
+              echo "App is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/30 - waiting..."
+            sleep 2
+          done
+          echo "App failed to become healthy"
+          docker compose logs app
+          exit 1
+      - name: Smoke Test
+        run: |
+          echo "Testing app homepage..."
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000)
+          echo "Homepage returned HTTP status: $HTTP_CODE"
+          if [[ "$HTTP_CODE" =~ ^(200|301|302|303|307|308)$ ]]; then
+            echo "✓ Homepage test passed"
+          else
+            echo "✗ Homepage test failed with status code: $HTTP_CODE"
+            echo "Checking app logs for issues..."
+            docker compose logs app --tail=20
+            exit 1
+          fi
+          
+          echo "Testing health endpoint..."
+          curl -f http://localhost:3000/api/health || exit 1
+          echo "✓ Health endpoint test passed"
+      - name: Cleanup
+        if: always()
+        run: docker compose down
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm audit --audit-level=high

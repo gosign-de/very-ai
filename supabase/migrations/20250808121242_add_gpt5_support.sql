@@ -1,0 +1,1 @@
+alter table "public"."profiles" add column "azure_openai_gpt5_id" text default ''::text;

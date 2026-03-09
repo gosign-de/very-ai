@@ -1,0 +1,182 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment target"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  authorize:
+    name: Authorize Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deploy permission
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          # ============================================================
+          # DEPLOY RESTRICTION
+          # Only deploy@gosign.de (GitHub username mapped below) can deploy.
+          # Update ALLOWED_USERS if the GitHub username differs.
+          # ============================================================
+          ALLOWED_USERS=("deploy-gosign" "deploy")
+
+          echo "Deploy triggered by: $TRIGGERING_ACTOR (actor: $ACTOR)"
+
+          AUTHORIZED=false
+          for user in "${ALLOWED_USERS[@]}"; do
+            if [[ "$TRIGGERING_ACTOR" == "$user" ]]; then
+              AUTHORIZED=true
+              break
+            fi
+          done
+
+          if [[ "$AUTHORIZED" != "true" ]]; then
+            echo "::error::UNAUTHORIZED: Only deploy@gosign.de can trigger deployments."
+            echo "::error::Current user: $TRIGGERING_ACTOR"
+            echo "::error::Contact deploy@gosign.de to request a deployment."
+            exit 1
+          fi
+
+          echo "Authorized deployer: $TRIGGERING_ACTOR"
+
+      - name: Verify confirmation
+        run: |
+          if [[ "${{ github.event.inputs.confirm }}" != "deploy" ]]; then
+            echo "::error::Deployment not confirmed. Type 'deploy' in the confirmation field."
+            exit 1
+          fi
+          echo "Deployment confirmed"
+
+  verify:
+    name: Pre-Deploy Verification
+    runs-on: ubuntu-latest
+    needs: [authorize]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: veryai_test
+          POSTGRES_PASSWORD: veryai_test
+          POSTGRES_DB: veryai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U veryai_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://veryai_test:veryai_test@localhost:5432/veryai_test
+      AUTH_PROVIDER: local
+      AUTH_SECRET: test-secret-not-for-production
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Run Full Test Suite
+        run: npm test -- --reporter=verbose
+
+      - name: Check Coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Security Audit
+        run: npm audit --audit-level=high
+
+      - name: Docker Build Test
+        run: docker compose build
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.very-ai.eu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy to Staging
+        run: |
+          echo "================================================"
+          echo "  DEPLOYING TO STAGING"
+          echo "  Triggered by: ${{ github.triggering_actor }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "================================================"
+          # Add your staging deployment commands here
+          echo "Staging deployment complete"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://very-ai.eu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy to Production
+        run: |
+          echo "================================================"
+          echo "  DEPLOYING TO PRODUCTION"
+          echo "  Triggered by: ${{ github.triggering_actor }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "================================================"
+          # Add your production deployment commands here
+          echo "Production deployment complete"
+
+      - name: Post-Deploy Health Check
+        run: |
+          echo "Waiting 30s for deployment to settle..."
+          sleep 30
+          # Uncomment when domain is live:
+          # curl -f https://very-ai.eu/api/health || echo "Health check failed - investigate!"
+          echo "Post-deploy check complete"

@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+supabase/docker/volumes
+Briefings
+__tests__
+*.md
+!README.md
+.env*
+!.env.example
